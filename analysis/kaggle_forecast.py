@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import random as rd
 import datetime
+import os
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -13,12 +14,10 @@ from sklearn.preprocessing import LabelBinarizer
 from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.model_selection import KFold
 
-TRAIN = 'train'
-VALID = 'valid'
-TEST = 'test'
-DESC = 'descrip'
-
-TARGET_COL = 'sales'
+import importlib
+import config 
+importlib.reload( config )
+from config import *
 
 class KaggleData():
 
@@ -36,17 +35,17 @@ class KaggleData():
         self.csv = { 'sales' : [], 'item_cat' : [], 'item' : [], 'sub' : [], 'shops' : [], 'test' : [] }
         
         # Import all csv file data
-        self.csv[ 'sales' ] = pd.read_csv( '../input/sales_train.csv')
+        self.csv[ 'sales' ] = pd.read_csv( os.path.join( PROJECT_PATH, 'input/sales_train.csv') )
 
         # Warnings
         import warnings
         warnings.filterwarnings('ignore')
 
-        self.csv['item_cat'] = pd.read_csv( '../input/item_categories.csv')
-        self.csv['item'] = pd.read_csv( '../input/items.csv')
-        self.csv['sub'] = pd.read_csv( '../input/sample_submission.csv')
-        self.csv['shops'] = pd.read_csv( '../input/shops.csv')
-        self.csv['test'] = pd.read_csv( '../input/test.csv')
+        self.csv['item_cat'] = pd.read_csv( os.path.join( PROJECT_PATH, 'input/item_categories.csv') )
+        self.csv['item'] = pd.read_csv( os.path.join( PROJECT_PATH, 'input/items.csv') )
+        self.csv['sub'] = pd.read_csv( os.path.join( PROJECT_PATH, 'input/sample_submission.csv') )
+        self.csv['shops'] = pd.read_csv( os.path.join( PROJECT_PATH, 'input/shops.csv') )
+        self.csv['test'] = pd.read_csv( os.path.join( PROJECT_PATH, 'input/test.csv') )
 
     def add_derived_features(self):
         # Reformat the date column
@@ -149,7 +148,7 @@ def write_forecast_to_csv( obj, yhat_test, output_file ):
     fcst_df = format_forecast( obj.csv['test'], fcst, fill_na=True )
 
     # Write the results to the output file
-    fcst_df.to_csv( '../forecasts/' + output_file, index=False, header=True )
+    fcst_df.to_csv( os.path.join( PROJECT_PATH, 'forecasts', output_file ), index=False, header=True )
 
 
 def get_lagged_features( obj, X, lags ):
