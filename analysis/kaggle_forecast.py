@@ -78,17 +78,38 @@ class KaggleData():
         # Aggregate the monthly data
         agg_rules = {'item_price' : "mean", "revenue" : "sum", "item_cnt_day" : "sum" }
         groupby_cols = [ "year_month", 'date_block_num', "shop_item_id", "item_id", "shop_id", "item_category_id" ]
-        self.monthly_shop_item = self.csv['sales'].groupby( groupby_cols ).agg( agg_rules ).reset_index()
+        
+        # Join the test IDs, and fill the values with 0
+        df_sales = self.csv['sales'].copy()
+        df_test = self.csv['test'].copy()
+        df_test['year_month'] = 1 + df_sales['year_month'].max()
+        df_test['date_block_num'] = 1 + df_sales['date_block_num'].max()
+
+        df = pd.concat( [ df_sales, df_test ] ).drop('ID', axis=1)
+        self.monthly_shop_item = df.groupby( groupby_cols ).agg( agg_rules ).reset_index()
         self.monthly_shop_item.rename( columns={ 'item_cnt_day' : 'item_cnt_month'}, inplace=True )
+
+        # Add the effective item price
+        self.monthly_shop_item['item_price_unit'] = self.monthly_shop_item['revenue'] / \
+                                      ( 1e-6 + self.monthly_shop_item['item_cnt_month'] )
 
     def create_time_series(self):
         """Create time series of variables that we will use for prediction."""
 
-        self.ts = { 'sales' : [], 'shop_id' : [], 'cat_id' : [], 'date_block_num' : [], 'month' : [], 'year' : [] }
+        self.ts = dict()
 
-        # Time series of the prices
+        # Time series of the sales
         self.ts['item_cnt_month'] = create_pivot_ts( self.monthly_shop_item, "shop_item_id", "item_cnt_month", "sum", 'zero'  )
+        self.ts['item_cnt_month'].iloc[-1] = np.nan
+        
+        # Time series of the prices
+        self.ts['item_price'] = create_pivot_ts( self.monthly_shop_item, "shop_item_id", "item_price", "mean", 'zero'  )
+        self.ts['item_price'].iloc[-1] = np.nan
 
+        # Time series of the unit prices
+        self.ts['item_price_unit'] = create_pivot_ts( self.monthly_shop_item, "shop_item_id", "item_price_unit", "mean", 'zero')
+        self.ts['item_price_unit'].iloc[-1] = np.nan
+        
         # Time series of the shop and item ids
         shop_id, item_id = decompose_shop_item_id( self.ts['item_cnt_month'].columns )
         self.ts['shop_id'] = pd.DataFrame( np.vstack( [ shop_id.values ] * self.ts['item_cnt_month'].shape[0] ), \
@@ -114,12 +135,12 @@ class KaggleData():
                                                                     index=self.ts['item_cnt_month'].index )
         self.ts['date_block_num'].columns = self.ts['item_cnt_month'].columns
 
-        months = np.array([ x % 100 for x in sorted( self.csv['sales'].year_month.unique()) ] )[:,np.newaxis]
+        months = np.array([ x % 100 for x in sorted( self.monthly_shop_item['year_month'].unique() ) ] )[:,np.newaxis]
         self.ts['month'] = pd.DataFrame( np.hstack( [ months ] * self.ts['item_cnt_month'].shape[1] ), \
                                                            index=self.ts['item_cnt_month'].index )
         self.ts['month'].columns = self.ts['item_cnt_month'].columns
 
-        years = np.array([ x // 100 for x in sorted( self.csv['sales'].year_month.unique()) ] )[:,np.newaxis]
+        years = np.array([ x // 100 for x in sorted( self.monthly_shop_item['year_month'].unique() ) ] )[:,np.newaxis]
         self.ts['year'] = pd.DataFrame( np.hstack( [ years ] * self.ts['item_cnt_month'].shape[1] ), \
                                                          index=self.ts['item_cnt_month'].index )
         self.ts['year'].columns = self.ts['item_cnt_month'].columns
@@ -131,11 +152,11 @@ class KaggleData():
 
         # Replace shop_id with one-hot encodings
         self.binarizer['shop']= LabelBinarizer(sparse_output=True)
-        self.binarizer['shop'].fit( self.csv['sales'].shop_id.unique())
+        self.binarizer['shop'].fit( self.monthly_shop_item['shop_id'].unique())
 
         # Replace category_id with one-hot encodings
         self.binarizer['cat'] = LabelBinarizer(sparse_output=True)
-        self.binarizer['cat'].fit( self.csv['sales'].item_category_id.unique())
+        self.binarizer['cat'].fit( self.monthly_shop_item['item_category_id'].unique())
 
         # Replace month with one-hot encodings
         self.binarizer['month'] = LabelBinarizer(sparse_output=True)
@@ -184,7 +205,7 @@ def get_labels_and_features( obj, features=dict() ):
 
     # Use different means as features
     if 'mean' in features:
-        get_lagged_mean_features( obj, X, means=features['mean'] )
+        X = get_lagged_mean_features( obj, X, means=features['mean'] )
 
     # Add the shop id as a feature
     if 'shop_id' in features:
