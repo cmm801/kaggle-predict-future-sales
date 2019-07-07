@@ -25,6 +25,8 @@ class KaggleData():
         """Read in csv files."""
 
         self.load_raw_data()
+        
+    def load_processed_data(self):
         self.add_derived_features()
         self.aggregate_monthly_sales()        
         self.create_time_series()
